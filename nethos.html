@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>NethOS — Network OS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+:root{--bg:#0a0c0f;--surface:#111418;--surface2:#181c22;--surface3:#1f252e;--border:#2a3040;--accent:#00d4ff;--accent2:#7c3aed;--accent3:#10b981;--warn:#f59e0b;--danger:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#475569;--radius:10px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden;user-select:none;}
+#boot{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .6s ease;}
+#boot.hide{opacity:0;pointer-events:none;}
+.boot-logo{font-size:clamp(2.5rem,8vw,5rem);font-weight:800;letter-spacing:-2px;color:var(--accent);text-shadow:0 0 60px rgba(0,212,255,.5);margin-bottom:8px;}
+.boot-sub{font-family:'JetBrains Mono',monospace;color:var(--text3);font-size:.75rem;letter-spacing:4px;margin-bottom:48px;}
+.boot-bar-wrap{width:min(320px,80vw);height:2px;background:#111;border-radius:99px;overflow:hidden;}
+.boot-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;animation:bootLoad 1.8s cubic-bezier(.4,0,.2,1) forwards;}
+@keyframes bootLoad{to{width:100%;}}
+#desktop{position:fixed;inset:0;display:flex;flex-direction:column;opacity:0;transition:opacity .5s ease;}
+#desktop.show{opacity:1;}
+#desktop::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 20% 30%,rgba(0,212,255,.05) 0%,transparent 60%),radial-gradient(ellipse 50% 60% at 80% 70%,rgba(124,58,237,.06) 0%,transparent 60%);pointer-events:none;z-index:0;}
+#topbar{height:42px;background:rgba(17,20,24,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;z-index:100;position:relative;flex-shrink:0;}
+.tb-logo{font-weight:800;font-size:1rem;color:var(--accent);}
+.tb-ip{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--accent3);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);padding:3px 8px;border-radius:99px;}
+.tb-spacer{flex:1;}
+.tb-clock{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--text2);}
+.tb-btn{background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:6px;font-family:'Syne',sans-serif;font-size:.7rem;font-weight:600;cursor:pointer;transition:all .15s;}
+.tb-btn:hover{border-color:var(--accent);color:var(--accent);}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent3);box-shadow:0 0 8px var(--accent3);animation:pulse 2s infinite;flex-shrink:0;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#workspace{flex:1;display:flex;overflow:hidden;position:relative;z-index:1;}
+#sidebar{width:64px;background:rgba(17,20,24,.9);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;flex-shrink:0;}
+.sb-icon{width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;gap:3px;transition:all .15s;position:relative;}
+.sb-icon svg{width:20px;height:20px;}
+.sb-icon span{font-size:.45rem;font-weight:600;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;}
+.sb-icon:hover{background:var(--surface3);}
+.sb-icon.active{background:rgba(0,212,255,.1);}
+.sb-icon.active svg,.sb-icon.active span{color:var(--accent);}
+.sb-icon.active::before{content:'';position:absolute;left:-1px;top:25%;height:50%;width:3px;background:var(--accent);border-radius:0 3px 3px 0;}
+.sb-sep{width:32px;height:1px;background:var(--border);margin:4px 0;}
+#panels{flex:1;position:relative;overflow:hidden;}
+.panel{position:absolute;inset:0;display:none;flex-direction:column;animation:panelIn .2s ease;}
+.panel.active{display:flex;}
+@keyframes panelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.panel-header{padding:16px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.panel-title{font-size:1rem;font-weight:700;flex:1;}
+.panel-body{flex:1;overflow-y:auto;padding:16px;}
+.panel-body::-webkit-scrollbar{width:4px;}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.card-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:12px;}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;}
+.stat-value{font-size:1.8rem;font-weight:800;line-height:1;margin-bottom:4px;}
+.stat-label{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
+.ip-display{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:600;color:var(--accent);}
+.url-display{font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--accent3);margin-top:6px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:7px;font-family:'Syne',sans-serif;font-size:.8rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+.btn-primary{background:var(--accent);color:#000;}.btn-primary:hover{background:#33ddff;}
+.btn-secondary{background:var(--surface3);color:var(--text);border:1px solid var(--border);}.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-sm{padding:5px 10px;font-size:.72rem;}
+input[type=text],input[type=url]{background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:.8rem;outline:none;transition:border-color .15s;width:100%;}
+input:focus{border-color:var(--accent);}
+.file-toolbar{display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;padding:16px;}
+.file-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .15s;text-align:center;}
+.file-item:hover{background:var(--surface2);border-color:var(--border);}
+.file-item.selected{background:rgba(0,212,255,.08);border-color:rgba(0,212,255,.3);}
+.file-icon{font-size:2rem;line-height:1;}
+.file-name{font-size:.65rem;color:var(--text);word-break:break-all;line-height:1.3;max-width:80px;}
+.file-shared{font-size:.55rem;color:var(--accent3);font-weight:600;}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:32px;text-align:center;margin:16px;cursor:pointer;transition:all .15s;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(0,212,255,.03);}
+.player-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.video-stage{background:#000;position:relative;flex-shrink:0;aspect-ratio:16/9;max-height:55%;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+#videoEl{width:100%;height:100%;object-fit:contain;display:block;}
+#audioEl{display:none;}
+#videoPlaceholder{text-align:center;color:var(--text3);}
+.video-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;cursor:pointer;}
+.video-stage:hover .video-overlay{opacity:1;}
+.play-icon-big{width:64px;height:64px;background:rgba(0,0,0,.6);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;backdrop-filter:blur(4px);}
+.player-controls{background:var(--surface);border-top:1px solid var(--border);padding:12px 16px;flex-shrink:0;}
+.progress-wrap{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.time-label{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--text2);white-space:nowrap;min-width:90px;}
+#progressBar{flex:1;height:4px;-webkit-appearance:none;appearance:none;background:var(--surface3);border-radius:99px;cursor:pointer;outline:none;border:none;}
+#progressBar::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 8px rgba(0,212,255,.5);}
+.ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.ctrl-btn{background:none;border:none;color:var(--text2);cursor:pointer;padding:6px;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.ctrl-btn:hover{color:var(--text);background:var(--surface3);}
+.ctrl-btn.active{color:var(--accent);}
+.ctrl-btn svg{width:20px;height:20px;}
+.ctrl-spacer{flex:1;}
+#volBar{width:70px;height:3px;-webkit-appearance:none;appearance:none;background:var(--surface3);border-radius:99px;cursor:pointer;outline:none;border:none;}
+#volBar::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--text);cursor:pointer;}
+.media-title{font-size:.75rem;color:var(--text2);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.playlist{flex:1;overflow-y:auto;border-top:1px solid var(--border);}
+.playlist-header{padding:10px 16px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+.playlist-item{display:flex;align-items:center;gap:10px;padding:8px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.03);transition:background .1s;}
+.playlist-item:hover{background:var(--surface2);}
+.playlist-item.playing{background:rgba(0,212,255,.06);}
+.playlist-item.playing .pl-name{color:var(--accent);}
+.pl-icon{font-size:1.1rem;flex-shrink:0;}
+.pl-name{font-size:.78rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pl-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:.8rem;padding:2px 6px;}
+.pl-del:hover{color:var(--danger);}
+.share-url-box{background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;}
+.share-url{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--accent3);flex:1;}
+.sync-bar{position:fixed;bottom:0;left:64px;right:0;height:48px;background:rgba(17,20,24,.97);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;z-index:200;backdrop-filter:blur(12px);transform:translateY(100%);transition:transform .3s ease;}
+.sync-bar.open{transform:translateY(0);}
+.sync-now-playing{flex:1;font-size:.72rem;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.peer-chip{background:var(--surface3);border:1px solid var(--border);border-radius:99px;padding:2px 8px;font-size:.6rem;color:var(--text2);display:flex;align-items:center;gap:4px;}
+.peer-chip .pdot{width:5px;height:5px;border-radius:50%;background:var(--accent3);}
+#chatDrawer{position:fixed;right:0;bottom:48px;width:min(320px,90vw);height:min(400px,60vh);background:var(--surface2);border:1px solid var(--border);border-radius:12px 0 0 0;display:flex;flex-direction:column;z-index:199;transform:translateX(100%);transition:transform .25s ease;overflow:hidden;}
+#chatDrawer.open{transform:translateX(0);}
+.chat-hdr{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:.75rem;font-weight:700;}
+#chatMessages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px;}
+.chat-msg{font-size:.72rem;line-height:1.5;background:var(--surface3);border-radius:8px;padding:6px 10px;}
+.chat-msg .cm-from{color:var(--accent);font-weight:700;margin-right:6px;}
+.chat-msg.mine{background:rgba(0,212,255,.08);}
+.chat-msg.system{color:var(--text3);font-style:italic;background:transparent;padding:2px 6px;}
+.chat-input-row{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border);flex-shrink:0;}
+.chat-input-row input{flex:1;}
+.sync-toast{position:fixed;top:52px;left:50%;transform:translateX(-50%) translateY(-10px);background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:8px 16px;font-size:.75rem;color:var(--accent);z-index:1000;opacity:0;transition:all .25s ease;pointer-events:none;white-space:nowrap;}
+.sync-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#term-window{position:fixed;left:80px;top:60px;width:min(820px,92vw);height:min(520px,80vh);background:#080a08;border:1px solid #1e3a1e;border-radius:12px;box-shadow:0 32px 80px rgba(0,0,0,.8);display:flex;flex-direction:column;z-index:500;overflow:hidden;opacity:0;pointer-events:none;transform:scale(.96) translateY(8px);transition:opacity .2s ease,transform .2s ease;min-width:320px;min-height:200px;font-family:'JetBrains Mono',monospace;}
+#term-window.open{opacity:1;pointer-events:all;transform:scale(1) translateY(0);}
+#term-window::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:10;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);border-radius:12px;}
+#term-titlebar{height:36px;flex-shrink:0;background:#0d100d;border-bottom:1px solid #1a2e1a;display:flex;align-items:center;padding:0 12px;gap:10px;cursor:grab;user-select:none;}
+#term-titlebar:active{cursor:grabbing;}
+.term-dots{display:flex;gap:6px;}
+.term-dot{width:12px;height:12px;border-radius:50%;cursor:pointer;flex-shrink:0;}
+.td-r{background:#ff5f57;}.td-y{background:#febc2e;}.td-g{background:#28c840;}
+.term-tb-title{flex:1;text-align:center;font-size:.62rem;letter-spacing:3px;color:#2a4a2a;text-transform:uppercase;font-weight:700;}
+.term-blink{width:5px;height:5px;border-radius:50%;background:#39ff14;animation:tblink 1.1s infinite;}
+@keyframes tblink{0%,100%{opacity:1}50%{opacity:0}}
+#term-tabbar{height:28px;flex-shrink:0;background:#0d100d;border-bottom:1px solid #1a2e1a;display:flex;align-items:center;padding:0 6px;gap:2px;overflow-x:auto;}
+.tterm-tab{height:22px;padding:0 12px;display:flex;align-items:center;gap:5px;border:1px solid transparent;border-radius:4px 4px 0 0;cursor:pointer;font-size:.6rem;color:#2a4a2a;white-space:nowrap;}
+.tterm-tab.active{color:#39ff14;background:#080a08;border-color:#1a2e1a;border-bottom-color:#080a08;}
+.tterm-tab-x{color:#2a4a2a;cursor:pointer;font-size:.7rem;}.tterm-tab-x:hover{color:#ff3333;}
+.tterm-add{padding:0 8px;color:#2a4a2a;cursor:pointer;font-size:1rem;}.tterm-add:hover{color:#39ff14;}
+#term-output{flex:1;overflow-y:auto;padding:10px 14px;line-height:1.65;font-size:clamp(.65rem,1.6vw,.78rem);color:#d4e8d0;}
+#term-output::-webkit-scrollbar{width:3px;}
+#term-output::-webkit-scrollbar-thumb{background:#0d3d03;border-radius:99px;}
+.tl{display:block;white-space:pre-wrap;word-break:break-all;}
+.tl-cmd{color:#39ff14;}.tl-out{color:#d4e8d0;}.tl-err{color:#ff3333;}.tl-warn{color:#ffe500;}.tl-info{color:#00ffcc;}.tl-success{color:#39ff14;}.tl-dim{color:#2a4a2a;}.tl-banner{color:#39ff14;font-weight:700;}
+#term-input-row{display:flex;align-items:center;padding:6px 14px;gap:6px;border-top:1px solid #1a2e1a;flex-shrink:0;background:#080a08;}
+.term-prompt{color:#00ffcc;font-size:clamp(.65rem,1.6vw,.78rem);flex-shrink:0;white-space:nowrap;}
+#termInput{flex:1;background:transparent;border:none;outline:none;color:#39ff14;caret-color:#39ff14;font-family:'JetBrains Mono',monospace;font-size:clamp(.65rem,1.6vw,.78rem);}
+.term-cursor{width:7px;height:12px;background:#39ff14;animation:tblink 1s infinite;flex-shrink:0;}
+#term-resize{position:absolute;bottom:0;right:0;width:16px;height:16px;cursor:nwse-resize;opacity:.3;z-index:11;background:linear-gradient(135deg,transparent 50%,#39ff14 50%);border-radius:0 0 12px 0;}
+.tprog-track{display:inline-block;width:120px;height:6px;background:#0d3d03;border-radius:99px;vertical-align:middle;overflow:hidden;}
+.tprog-bar{display:inline-block;height:100%;background:#39ff14;border-radius:99px;}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px;}
+.modal-bg.open{display:flex;}
+.modal{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:480px;width:100%;}
+.modal h2{font-size:1.1rem;margin-bottom:6px;}.modal p{font-size:.8rem;color:var(--text2);line-height:1.7;margin-bottom:16px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+#notif-area{position:fixed;bottom:60px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:2000;}
+.notif{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:.78rem;min-width:220px;max-width:300px;animation:notifIn .25s ease;}
+@keyframes notifIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.notif.success{border-left:3px solid var(--accent3);}.notif.info{border-left:3px solid var(--accent);}.notif.warn{border-left:3px solid var(--warn);}.notif.err{border-left:3px solid var(--danger);}
+.ctx-menu{position:fixed;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;min-width:160px;z-index:3000;box-shadow:0 8px 32px rgba(0,0,0,.5);display:none;}
+.ctx-menu.open{display:block;}
+.ctx-item{padding:7px 12px;border-radius:5px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s;}
+.ctx-item:hover{background:var(--surface3);}
+.ctx-item.danger{color:var(--danger);}
+.ctx-sep{height:1px;background:var(--border);margin:4px;}
+.instructions{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono',monospace;font-size:.75rem;line-height:1.8;color:var(--text2);}
+.instructions .cmd{color:var(--accent3);background:rgba(16,185,129,.1);padding:2px 6px;border-radius:4px;}
+.setting-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.setting-info{flex:1;}.setting-name{font-size:.82rem;font-weight:600;}.setting-desc{font-size:.7rem;color:var(--text2);margin-top:2px;}
+.yt-preview{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:none;margin-top:12px;}
+.yt-thumb{width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;}
+.yt-thumb img{width:100%;height:100%;object-fit:cover;}
+.yt-info{padding:14px;}.yt-title{font-size:.9rem;font-weight:600;margin-bottom:4px;}.yt-meta{font-size:.72rem;color:var(--text2);margin-bottom:12px;}
+.yt-actions{display:flex;gap:8px;flex-wrap:wrap;}
+@media(max-width:500px){.ctrl-row{gap:4px;}#volBar{width:50px;}.file-grid{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));}}
+</style>
+</head>
+<body>
+<div id="boot"><div class="boot-logo">NethOS</div><div class="boot-sub">Network · Media · Share</div><div class="boot-bar-wrap"><div class="boot-bar"></div></div></div>
+
+<div id="desktop">
+  <div id="topbar">
+    <span class="tb-logo">NethOS</span>
+    <div style="display:flex;align-items:center;gap:6px"><div class="status-dot" id="mainDot"></div><span class="tb-ip" id="tbip">Detecting...</span></div>
+    <div class="tb-spacer"></div>
+    <div class="tb-clock" id="clock">--:--</div>
+    <button class="tb-btn" onclick="openShutdown()">⏻ Shut Down</button>
+  </div>
+  <div id="workspace">
+    <div id="sidebar">
+      <div class="sb-icon active" data-panel="home" onclick="showPanel('home',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></div>
+      <div class="sb-icon" data-panel="files" onclick="showPanel('files',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><span>Files</span></div>
+      <div class="sb-icon" data-panel="media" onclick="showPanel('media',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span>Media</span></div>
+      <div class="sb-sep"></div>
+      <div class="sb-icon" data-panel="youtube" onclick="showPanel('youtube',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg><span>YT-DL</span></div>
+      <div class="sb-icon" data-panel="network" onclick="showPanel('network',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49m-8.48-.01a6 6 0 010-8.49m11.31-2.82a10 10 0 010 14.14m-14.14 0a10 10 0 010-14.14"/></svg><span>LAN</span></div>
+      <div class="sb-sep"></div>
+      <div class="sb-icon" onclick="toggleTerminal()" id="termSbBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Term</span></div>
+      <div class="sb-sep"></div>
+      <div class="sb-icon" data-panel="settings" onclick="showPanel('settings',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>Config</span></div>
+    </div>
+    <div id="panels">
+      <!-- HOME -->
+      <div class="panel active" id="panel-home">
+        <div class="panel-header"><div class="panel-title">Dashboard</div></div>
+        <div class="panel-body">
+          <div class="dash-grid">
+            <div class="card"><div class="card-title">Network</div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="status-dot"></div><span id="serverStatusLabel" style="font-size:.78rem;color:var(--text2)">Detecting server...</span></div><div class="ip-display" id="localIP">--</div><div class="url-display" id="shareURL">http://...</div></div>
+            <div class="card"><div class="card-title">Files Shared</div><div class="stat-value" style="color:var(--accent)" id="fileCount">0</div><div class="stat-label">on LAN</div></div>
+            <div class="card"><div class="card-title">Media Queue</div><div class="stat-value" style="color:var(--accent2)" id="playlistCount">0</div><div class="stat-label">items</div></div>
+            <div class="card"><div class="card-title">Session</div><div class="stat-value" style="color:var(--accent3)" id="sessionTime">0:00</div><div class="stat-label">uptime</div></div>
+          </div>
+          <div class="instructions"><div style="color:var(--accent);font-weight:700;margin-bottom:8px">⚡ Quick Start</div><div>1. Run: <span class="cmd">node nethos-server.js</span></div><div>2. Both devices open: <span class="cmd">http://YOUR-IP:3000/nethos.html</span></div><div>3. Add files → upload → all devices can stream</div><div>4. Press play → all devices play in sync</div></div>
+        </div>
+      </div>
+      <!-- FILES -->
+      <div class="panel" id="panel-files">
+        <div class="panel-header">
+          <div class="panel-title">File Manager</div>
+          <span id="serverSyncLabel" style="font-size:.65rem;color:var(--text3)">No server</span>
+          <button class="btn btn-secondary btn-sm" onclick="fetchServerFiles()">↻ Sync</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileInput').click()">+ Add Files</button>
+        </div>
+        <div class="file-toolbar">
+          <span style="font-size:.7rem;color:var(--text2);flex:1">Shared files</span>
+          <button class="btn btn-secondary btn-sm" onclick="selectAllFiles()">Select All</button>
+          <button class="btn btn-secondary btn-sm" id="shareBtn" style="display:none" onclick="shareSelected()">Share</button>
+          <button class="btn btn-danger btn-sm" id="deleteBtn" style="display:none" onclick="deleteSelected()">Remove</button>
+        </div>
+        <input type="file" id="fileInput" multiple style="display:none" onchange="addFiles(this.files)">
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"><div style="font-size:2.5rem;margin-bottom:8px">📁</div><p><strong>Click to add files</strong> or drag &amp; drop</p><p style="margin-top:4px;font-size:.7rem;color:var(--text2)">Files upload to server so all devices can stream</p></div>
+        <div class="file-grid" id="fileGrid"></div>
+      </div>
+      <!-- MEDIA -->
+      <div class="panel" id="panel-media">
+        <div class="panel-header"><div class="panel-title">Media Player</div><button class="btn btn-secondary btn-sm" onclick="document.getElementById('mediaInput').click()">+ Load Media</button></div>
+        <input type="file" id="mediaInput" style="display:none" multiple accept="video/*,audio/*" onchange="loadMediaFiles(this.files)">
+        <div class="player-wrap">
+          <div class="video-stage" id="videoStage">
+            <video id="videoEl" preload="metadata"></video>
+            <audio id="audioEl" preload="metadata"></audio>
+            <div id="videoPlaceholder"><div style="font-size:3rem;margin-bottom:8px">🎬</div><div style="font-size:.8rem">No media loaded</div></div>
+            <div class="video-overlay" onclick="togglePlay()"><div class="play-icon-big" id="playIconBig">▶</div></div>
+          </div>
+          <div class="player-controls">
+            <div class="media-title" id="mediaTitle">Nothing playing</div>
+            <div class="progress-wrap"><span class="time-label" id="timeLabel">0:00 / 0:00</span><input type="range" id="progressBar" min="0" max="1000" value="0" oninput="seekMedia(this.value)"></div>
+            <div class="ctrl-row">
+              <button class="ctrl-btn" onclick="prevTrack()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+              <button class="ctrl-btn" onclick="skipTime(-10)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg></button>
+              <button class="ctrl-btn" onclick="togglePlay()" style="transform:scale(1.2)"><svg viewBox="0 0 24 24" fill="currentColor" id="playIcon"><path d="M8 5v14l11-7z"/></svg></button>
+              <button class="ctrl-btn" onclick="skipTime(10)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-5"/></svg></button>
+              <button class="ctrl-btn" onclick="nextTrack()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2.5-6L15 6v12z"/></svg></button>
+              <div class="ctrl-spacer"></div>
+              <button class="ctrl-btn" id="shuffleBtn" onclick="toggleShuffle()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg></button>
+              <button class="ctrl-btn" id="repeatBtn" onclick="toggleRepeat()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></button>
+              <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+              <input type="range" id="volBar" min="0" max="100" value="80" oninput="setVolume(this.value)">
+              <button class="ctrl-btn" onclick="toggleFullscreen()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg></button>
+            </div>
+          </div>
+          <div class="playlist">
+            <div class="playlist-header"><span>Playlist</span><span id="plCount" style="color:var(--accent)">0 items</span><div style="flex:1"></div><button class="ctrl-btn" style="font-size:.7rem" onclick="clearPlaylist()">Clear</button></div>
+            <div id="playlistEl"></div>
+          </div>
+        </div>
+      </div>
+      <!-- YOUTUBE -->
+      <div class="panel" id="panel-youtube">
+        <div class="panel-header"><div class="panel-title">YouTube Downloader</div></div>
+        <div class="panel-body">
+          <div class="card" style="max-width:600px;margin:0 auto">
+            <div class="card-title">Paste YouTube URL</div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><input type="url" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..." oninput="ytPreview()" style="flex:1;min-width:180px"><button class="btn btn-primary" onclick="ytFetch()">Preview</button></div>
+            <div id="ytPreview" class="yt-preview"><div class="yt-thumb"><img id="ytThumb" src="" alt=""></div><div class="yt-info"><div class="yt-title" id="ytTitle">Video</div><div class="yt-meta" id="ytMeta">YouTube</div><div class="yt-actions"><button class="btn btn-primary btn-sm" onclick="ytDownload('video')">⬇ Download Video</button><button class="btn btn-secondary btn-sm" onclick="ytDownload('audio')">🎵 Audio Only</button><button class="btn btn-success btn-sm" onclick="ytWatchNow()">▶ Watch Now</button></div></div></div>
+          </div>
+          <div class="card" style="max-width:600px;margin:16px auto 0;border-left:3px solid var(--warn)"><h3 style="color:var(--warn);font-size:.85rem;margin-bottom:8px">⚠ Backend Required</h3><p style="font-size:.77rem;color:var(--text2);line-height:1.7">Run <code style="font-family:'JetBrains Mono',monospace;background:rgba(245,158,11,.1);padding:2px 6px;border-radius:4px;color:var(--warn)">node nethos-server.js</code> and install <code style="font-family:'JetBrains Mono',monospace;background:rgba(245,158,11,.1);padding:2px 6px;border-radius:4px;color:var(--warn)">pip install yt-dlp</code> for downloads.</p></div>
+        </div>
+      </div>
+      <!-- NETWORK -->
+      <div class="panel" id="panel-network">
+        <div class="panel-header"><div class="panel-title">LAN Network</div></div>
+        <div class="panel-body">
+          <div class="card"><div class="card-title">Share URL</div><div class="share-url-box"><span class="share-url" id="netShareURL">http://YOUR-IP:3000</span><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('netShareURL').textContent).then(()=>notify('Copied!','success'))">Copy</button></div></div>
+          <div class="card"><div class="card-title">Connected Peers</div><div id="peersList"><div style="display:flex;align-items:center;gap:12px;padding:8px;background:var(--surface3);border-radius:8px"><div style="font-size:1.1rem">💻</div><div style="flex:1"><div style="font-size:.82rem;font-weight:600">This Device (Host)</div><div style="font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--text2)" id="peerYourIP">--</div></div><span style="font-size:.62rem;font-weight:700;background:rgba(0,212,255,.15);color:var(--accent);padding:3px 8px;border-radius:99px">YOU</span></div><div id="remotePeers" style="margin-top:8px"></div></div></div>
+          <div class="card"><div class="card-title">How It Works</div><div style="font-size:.78rem;color:var(--text2);line-height:1.9"><div>🔴 Server runs on your Linux machine</div><div>📡 Both devices open the same http://IP:3000 URL</div><div>📁 Files uploaded once, streamed to everyone</div><div>▶ Press play → all devices play in sync</div><div>💬 Built-in chat while watching</div></div></div>
+        </div>
+      </div>
+      <!-- SETTINGS -->
+      <div class="panel" id="panel-settings">
+        <div class="panel-header"><div class="panel-title">Settings</div></div>
+        <div class="panel-body"><div class="card"><div class="card-title">Server</div><div class="setting-row" style="border:none"><div class="setting-info"><div class="setting-name">Export Server Script</div><div class="setting-desc">Download nethos-server.js to run on your Linux machine</div></div><button class="btn btn-primary btn-sm" onclick="exportServer()">Export</button></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC BAR -->
+<div class="sync-bar" id="syncBar">
+  <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text2)"><div class="status-dot" id="wsStatusDot" style="background:var(--text3);box-shadow:none;animation:none"></div><span id="wsStatusLabel">Not connected</span></div>
+  <div class="sync-now-playing" id="syncNowPlaying">No media playing</div>
+  <div style="display:flex;gap:4px;align-items:center" id="syncPeers"></div>
+  <button class="tb-btn" onclick="toggleChat()" id="chatBtn">💬 Chat</button>
+</div>
+<!-- CHAT -->
+<div id="chatDrawer">
+  <div class="chat-hdr"><span>💬 Watch Together</span><span id="chatPeerCount" style="color:var(--accent3);font-size:.65rem">1 online</span><div style="flex:1"></div><button class="tb-btn" style="font-size:.6rem;padding:2px 8px" onclick="toggleChat()">✕</button></div>
+  <div id="chatMessages"></div>
+  <div class="chat-input-row"><input type="text" id="chatInput" placeholder="Say something..." maxlength="200" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button></div>
+</div>
+<div class="sync-toast" id="syncToast"></div>
+<!-- TERMINAL -->
+<div id="term-window">
+  <div id="term-titlebar" onmousedown="termDragStart(event)" ontouchstart="termTouchStart(event)">
+    <div class="term-dots"><div class="term-dot td-r" onclick="closeTerminal()"></div><div class="term-dot td-y" onclick="minimizeTerminal()"></div><div class="term-dot td-g" onclick="maximizeTerminal()"></div></div>
+    <div class="term-tb-title">NETHOS TERMINAL v2.0</div>
+    <div style="font-size:.58rem;color:#1a6a1a;display:flex;align-items:center;gap:4px"><div class="term-blink"></div><span id="termStatus">READY</span></div>
+  </div>
+  <div id="term-tabbar"><div class="tterm-tab active" id="ttab-0"><span>⚡ main</span><span class="tterm-tab-x" onclick="event.stopPropagation();termCloseTab(0)">×</span></div><div class="tterm-add" onclick="termNewTab()">+</div></div>
+  <div id="term-output"></div>
+  <div id="term-input-row"><div class="term-prompt" id="termPromptEl">❯ nethos@local:~$&nbsp;</div><input id="termInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="type a command..." onkeydown="termHandleKey(event)"><div class="term-cursor"></div></div>
+  <div id="term-resize" onmousedown="termResizeStart(event)"></div>
+</div>
+<!-- MODALS -->
+<div class="modal-bg" id="modalBg"><div class="modal"><h2>Shut Down NethOS?</h2><p>This will stop all sharing and close the session.</p><div class="modal-actions"><button class="btn btn-secondary" onclick="document.getElementById('modalBg').classList.remove('open')">Cancel</button><button class="btn btn-danger" onclick="shutdown()">Shut Down</button></div></div></div>
+<div class="ctx-menu" id="ctxMenu"><div class="ctx-item" onclick="ctxPlay()">▶ Play</div><div class="ctx-item" onclick="ctxShare()">📡 Share on LAN</div><div class="ctx-item" onclick="ctxDownload()">⬇ Download</div><div class="ctx-sep"></div><div class="ctx-item danger" onclick="ctxDelete()">🗑 Remove</div></div>
+<div id="notif-area"></div>
+
+<script>
+// ─── STATE ───
+let files=[], playlist=[], currentTrack=-1, activeMedia=null;
+let isShuffle=false, repeatMode=0;
+let selectedFiles=new Set(), sessionStart=Date.now(), ctxIdx=null;
+let serverBase='', serverOnline=false;
+let ws=null, wsTimer=null, myId=null, myName='Me', peers=[], isSyncing=false;
+let chatOpen=false, termOpen=false, termMax=false, termMin=false;
+let termHistory=[], termHistIdx=-1, termDir='~', termBusy=false;
+let termTabs=[{id:0}], termTabN=1;
+let tDrag=false, tDOX=0, tDOY=0, tRes=false, tROW=0, tROH=0, tROX=0, tROY=0;
+const termVFS={'~':['nethos-server.js','nethos.html'],'~/downloads':[]};
+let termInst={};
+
+// ─── BOOT ───
+window.addEventListener('load',()=>setTimeout(()=>{document.getElementById('boot').classList.add('hide');document.getElementById('desktop').classList.add('show');init();},1800));
+
+function init(){
+  updateClock(); setInterval(updateClock,1000); setInterval(updateSession,1000);
+  detectIP(); setupDrag(); setupMedia(); startServer();
+}
+
+// ─── CLOCK ───
+function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function updateSession(){const s=Math.floor((Date.now()-sessionStart)/1000),m=Math.floor(s/60),h=Math.floor(m/60);document.getElementById('sessionTime').textContent=h>0?`${h}:${p2(m%60)}:${p2(s%60)}`:`${m}:${p2(s%60)}`;}
+function p2(n){return String(n).padStart(2,'0');}
+
+// ─── IP ───
+function detectIP(){try{const pc=new RTCPeerConnection({iceServers:[]});pc.createDataChannel('');pc.createOffer().then(o=>pc.setLocalDescription(o));pc.onicecandidate=e=>{if(!e||!e.candidate)return;const m=e.candidate.candidate.match(/\d+\.\d+\.\d+\.\d+/);if(m&&!m[0].startsWith('127.')&&!m[0].startsWith('169.')){setIP(m[0]);pc.close();}};}catch(e){}}
+function setIP(ip){const u=`http://${ip}:3000`;['localIP','tbip'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=ip;});['shareURL','netShareURL','peerYourIP'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=id==='peerYourIP'?ip:u;});}
+
+// ─── SERVER ───
+async function startServer(){
+  for(const b of [window.location.origin,'http://localhost:3000',`http://${location.hostname}:3000`]){
+    try{const r=await fetch(b+'/api/info',{signal:AbortSignal.timeout(1500)});if(r.ok){const d=await r.json();serverBase=b;serverOnline=true;if(d.ip)setIP(d.ip);setSrvStatus(true);notify('Server connected ✓','success');await fetchServerFiles();connectWS();return;}}catch(e){}
+  }
+  setSrvStatus(false);notify('No server — local mode','warn');
+}
+function setSrvStatus(on){
+  document.getElementById('serverStatusLabel').textContent=on?`Live: ${serverBase}`:'No server — local mode';
+  document.getElementById('serverStatusLabel').style.color=on?'var(--accent3)':'var(--warn)';
+  document.getElementById('serverSyncLabel').textContent=on?`● ${serverBase}`:'No server';
+  document.getElementById('serverSyncLabel').style.color=on?'var(--accent3)':'var(--text3)';
+  document.getElementById('mainDot').style.background=on?'var(--accent3)':'var(--warn)';
+}
+
+// ─── WEBSOCKET ───
+function connectWS(){
+  if(ws&&ws.readyState===WebSocket.OPEN)return;
+  const h=serverBase.replace(/^https?:\/\//,'');
+  try{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${h}`);}catch(e){wsTimer=setTimeout(connectWS,4000);return;}
+  ws.onopen=()=>{clearTimeout(wsTimer);document.getElementById('wsStatusDot').style.cssText='background:var(--accent3);box-shadow:0 0 8px var(--accent3);animation:pulse 2s infinite;';document.getElementById('wsStatusLabel').textContent='Watch Together ON';document.getElementById('syncBar').classList.add('open');document.getElementById('workspace').style.paddingBottom='48px';notify('Watch Together ON ✓','success');};
+  ws.onmessage=e=>{try{handleWS(JSON.parse(e.data));}catch(x){}};
+  ws.onclose=()=>{wsTimer=setTimeout(connectWS,4000);};
+  ws.onerror=()=>{};
+}
+function wsSend(d){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(d));}
+
+function handleWS(msg){
+  switch(msg.type){
+    case 'welcome':
+      myId=msg.id;myName=msg.name;peers=msg.peers||[];updatePeers();
+      if(msg.files&&msg.files.length)mergeFiles(msg.files);
+      if(msg.playback&&msg.playback.file){
+        const el=(Date.now()-msg.playback.updatedAt)/1000;
+        remotePlay(msg.playback.file,msg.playback.url,msg.playback.playing?(msg.playback.time+el):msg.playback.time,msg.playback.playing);
+      }
+      break;
+    case 'peer_joined':peers.push(msg.peer);updatePeers();sysChat(`${msg.peer.name} joined`);toast(`${msg.peer.name} joined`);break;
+    case 'peer_left':peers=peers.filter(p=>p.id!==msg.id);updatePeers();sysChat(`${msg.name} left`);break;
+    case 'track_change':if(isSyncing)return;isSyncing=true;toast(`🎵 ${msg.by||'Someone'} changed track`);remotePlay(msg.file,msg.url,0,true);setTimeout(()=>isSyncing=false,1000);break;
+    case 'play':if(isSyncing)return;isSyncing=true;toast(`▶ ${msg.by||'Someone'} playing`);remotePlay(msg.file,msg.url,msg.time,true);setTimeout(()=>isSyncing=false,1000);break;
+    case 'pause':if(isSyncing)return;isSyncing=true;toast(`⏸ ${msg.by||'Someone'} paused`);getEl().pause();getEl().currentTime=msg.time||0;setPlayIcon(false);setTimeout(()=>isSyncing=false,500);break;
+    case 'seek':if(isSyncing)return;isSyncing=true;getEl().currentTime=msg.time||0;setTimeout(()=>isSyncing=false,500);break;
+    case 'chat':addChat(msg.from,msg.text,false);if(!chatOpen){document.getElementById('chatBtn').style.color='var(--accent)';setTimeout(()=>document.getElementById('chatBtn').style.color='',2000);}break;
+    case 'file_added':if(msg.file&&msg.file.name){mergeFiles([msg.file]);toast(`📁 New: ${msg.file.name}`);}break;
+    case 'file_deleted':files=files.filter(f=>f.name!==msg.name);renderFiles();updateDash();break;
+    case 'server_shutdown':notify('Server shut down','warn');document.getElementById('syncBar').classList.remove('open');break;
+  }
+}
+
+// remotePlay — received from another device, play the file
+function remotePlay(filename,url,time,shouldPlay){
+  // Always resolve to a real http URL
+  if(!url||url.startsWith('blob:')){
+    if(!serverBase)return;
+    url=`${serverBase}/files/${encodeURIComponent(filename)}`;
+  }
+  const type=guessType(filename);
+  const isVid=type.startsWith('video/');
+  const el=isVid?VID:AUD;
+  const other=isVid?AUD:VID;
+
+  // Update playlist
+  let idx=playlist.findIndex(t=>t.name===filename);
+  if(idx===-1){playlist.push({name:filename,url,type});idx=playlist.length-1;}
+  else playlist[idx].url=url;
+  currentTrack=idx;
+  activeMedia=isVid?'video':'audio';
+
+  other.pause();
+  VID.style.display=isVid?'block':'none';
+  document.getElementById('videoPlaceholder').style.display=isVid?'none':'block';
+  el.src=url;
+  el.volume=document.getElementById('volBar').value/100;
+
+  if(shouldPlay){
+    el.play().catch(()=>{toast('▶ Tap screen to start (autoplay blocked)');document.body.addEventListener('click',()=>el.play().catch(()=>{}),{once:true});});
+    if(time>1)el.addEventListener('canplay',()=>{el.currentTime=time;},{once:true});
+    setPlayIcon(true);
+  }else{el.pause();if(time>0)el.currentTime=time;setPlayIcon(false);}
+
+  document.getElementById('mediaTitle').textContent=filename;
+  renderPlaylist();
+  document.getElementById('syncNowPlaying').textContent=`▶ ${filename}`;
+  showPanel('media',document.querySelector('[data-panel="media"]'));
+}
+
+function updatePeers(){
+  const all=[{id:myId,name:'You'},...peers.filter(p=>p.id!==myId)];
+  document.getElementById('chatPeerCount').textContent=`${all.length} online`;
+  document.getElementById('syncPeers').innerHTML=all.slice(0,5).map(p=>`<div class="peer-chip"><div class="pdot"></div>${p.name==='You'?'<strong>You</strong>':p.name}</div>`).join('');
+  document.getElementById('remotePeers').innerHTML=peers.filter(p=>p.id!==myId).map(p=>`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--surface3);border-radius:8px;margin-top:6px"><div style="font-size:1.1rem">📱</div><div style="flex:1"><div style="font-size:.82rem;font-weight:600">${p.name}</div></div><span style="font-size:.62rem;font-weight:700;background:rgba(16,185,129,.15);color:var(--accent3);padding:3px 8px;border-radius:99px">ONLINE</span></div>`).join('');
+}
+
+// ─── FILE MANAGER ───
+function guessType(n){n=n.toLowerCase();if(n.match(/\.(mp4|mkv|webm|mov|avi)$/))return 'video/mp4';if(n.match(/\.(mp3|wav|ogg|flac|aac|m4a)$/))return 'audio/mpeg';if(n.match(/\.(jpg|jpeg|png|gif|webp)$/))return 'image/jpeg';if(n.endsWith('.pdf'))return 'application/pdf';return 'application/octet-stream';}
+function fIcon(f){const t=f.type||'',n=f.name.toLowerCase();if(t.startsWith('video/'))return'🎬';if(t.startsWith('audio/')||n.match(/\.(mp3|wav|flac|aac|m4a|ogg)$/))return'🎵';if(t.startsWith('image/'))return'🖼';if(n.endsWith('.pdf'))return'📄';if(n.match(/\.(zip|rar|7z)$/))return'📦';return'📁';}
+
+async function fetchServerFiles(){
+  if(!serverOnline)return;
+  try{const r=await fetch(serverBase+'/api/files',{signal:AbortSignal.timeout(3000)});if(r.ok)mergeFiles(await r.json());}catch(e){}
+  try{const r=await fetch(serverBase+'/api/downloads',{signal:AbortSignal.timeout(3000)});if(r.ok)mergeFiles(await r.json(),true);}catch(e){}
+}
+
+function mergeFiles(list,isDL=false){
+  let added=0;
+  list.forEach(sf=>{
+    if(!sf.name)return;
+    if(files.find(f=>f.name===sf.name&&f._server))return;
+    const prefix=isDL?'/downloads/':'/files/';
+    files.push({name:sf.name,size:sf.size||0,type:guessType(sf.name),_url:sf.url||(serverBase+prefix+encodeURIComponent(sf.name)),_shared:true,_server:true});
+    added++;
+  });
+  if(added){renderFiles();updateDash();}
+}
+
+async function addFiles(filelist){
+  const arr=Array.from(filelist).filter(f=>!files.find(x=>x.name===f.name&&x.size===f.size));
+  arr.forEach(f=>{f._blobUrl=URL.createObjectURL(f);f._url=f._blobUrl;f._shared=false;f._server=false;files.push(f);});
+  renderFiles();updateDash();
+  if(!arr.length)return;
+  notify(`Added ${arr.length} file(s)`,'success');
+  if(!serverOnline){notify('No server — files play locally only','warn');return;}
+  notify('Uploading to server...','info');
+  const form=new FormData();arr.forEach(f=>form.append('files',f));
+  try{
+    const r=await fetch(serverBase+'/api/upload',{method:'POST',body:form});
+    if(r.ok){
+      arr.forEach(f=>{
+        const e=files.find(x=>x.name===f.name&&!x._server);
+        if(e){e._url=`${serverBase}/files/${encodeURIComponent(f.name)}`;e._shared=true;e._server=true;}
+        const pi=playlist.find(p=>p.name===f.name);
+        if(pi){pi.url=`${serverBase}/files/${encodeURIComponent(f.name)}`;
+          if(playlist.indexOf(pi)===currentTrack){const el=getEl(),t=el.currentTime,playing=!el.paused;el.src=pi.url;el.addEventListener('canplay',()=>{el.currentTime=t;if(playing)el.play().catch(()=>{});},{once:true});}
+        }
+      });
+      renderFiles();notify(`${arr.length} file(s) live on LAN ✓`,'success');
+    }
+  }catch(e){notify('Upload failed — local only','warn');}
+}
+
+function renderFiles(){
+  const grid=document.getElementById('fileGrid'),zone=document.getElementById('uploadZone');
+  zone.style.display=files.length?'none':'block';
+  grid.innerHTML=files.map((f,i)=>`<div class="file-item${selectedFiles.has(i)?' selected':''}" onclick="toggleSel(${i},event)" ondblclick="openFile(${i})" oncontextmenu="showCtx(event,${i})"><div class="file-icon">${fIcon(f)}</div><div class="file-name">${f.name}</div>${f._shared?'<div class="file-shared">📡</div>':''}</div>`).join('');
+}
+function toggleSel(i,e){selectedFiles.has(i)?selectedFiles.delete(i):selectedFiles.add(i);renderFiles();const h=selectedFiles.size>0;document.getElementById('shareBtn').style.display=h?'':'none';document.getElementById('deleteBtn').style.display=h?'':'none';}
+function selectAllFiles(){files.forEach((_,i)=>selectedFiles.add(i));renderFiles();document.getElementById('shareBtn').style.display='inline-flex';document.getElementById('deleteBtn').style.display='inline-flex';}
+async function deleteSelected(){const idxs=[...selectedFiles].sort((a,b)=>b-a);const del=idxs.map(i=>files[i]);idxs.forEach(i=>{if(files[i]._blobUrl)URL.revokeObjectURL(files[i]._blobUrl);files.splice(i,1);});selectedFiles.clear();renderFiles();updateDash();document.getElementById('shareBtn').style.display='none';document.getElementById('deleteBtn').style.display='none';notify('Removed','info');if(serverOnline)for(const f of del)if(f._server)try{await fetch(serverBase+'/api/files/'+encodeURIComponent(f.name),{method:'DELETE'});}catch(e){}}
+async function shareSelected(){const toUp=[...selectedFiles].map(i=>files[i]).filter(f=>!f._server);selectedFiles.forEach(i=>files[i]._shared=true);selectedFiles.clear();renderFiles();document.getElementById('shareBtn').style.display='none';document.getElementById('deleteBtn').style.display='none';if(serverOnline&&toUp.length){const form=new FormData();toUp.forEach(f=>{if(f instanceof File)form.append('files',f);});try{const r=await fetch(serverBase+'/api/upload',{method:'POST',body:form});if(r.ok)notify('Shared ✓','success');}catch(e){}}else notify('Marked for sharing','success');}
+
+async function openFile(i){
+  const f=files[i];
+  const isMedia=f.type.startsWith('video/')||f.type.startsWith('audio/');
+  if(isMedia){
+    if(serverOnline&&!f._server&&f instanceof File){
+      notify('Uploading...','info');
+      const form=new FormData();form.append('files',f);
+      try{const r=await fetch(serverBase+'/api/upload',{method:'POST',body:form});if(r.ok){f._url=`${serverBase}/files/${encodeURIComponent(f.name)}`;f._server=true;renderFiles();}}catch(e){}
+    }
+    addToPlaylist(f);showPanel('media',document.querySelector('[data-panel="media"]'));playTrack(playlist.length-1);
+  }else if(f.type.startsWith('image/')){window.open(f._url,'_blank');}
+  else{const a=document.createElement('a');a.href=f._url;a.download=f.name;a.click();}
+}
+
+function setupDrag(){
+  ['dragenter','dragover'].forEach(ev=>document.body.addEventListener(ev,e=>{e.preventDefault();document.getElementById('uploadZone').classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>document.body.addEventListener(ev,e=>{document.getElementById('uploadZone').classList.remove('drag');if(ev==='drop'){e.preventDefault();addFiles(e.dataTransfer.files);}}));
+}
+
+function showCtx(e,i){e.preventDefault();ctxIdx=i;const m=document.getElementById('ctxMenu');m.style.left=Math.min(e.clientX,window.innerWidth-170)+'px';m.style.top=Math.min(e.clientY,window.innerHeight-150)+'px';m.classList.add('open');}
+document.addEventListener('click',()=>document.getElementById('ctxMenu').classList.remove('open'));
+function ctxPlay(){if(ctxIdx===null)return;openFile(ctxIdx);ctxIdx=null;}
+function ctxShare(){if(ctxIdx===null)return;files[ctxIdx]._shared=true;renderFiles();notify('Shared','success');ctxIdx=null;}
+function ctxDownload(){if(ctxIdx===null)return;const f=files[ctxIdx];const a=document.createElement('a');a.href=f._url;a.download=f.name;a.click();ctxIdx=null;}
+function ctxDelete(){if(ctxIdx===null)return;if(files[ctxIdx]._blobUrl)URL.revokeObjectURL(files[ctxIdx]._blobUrl);files.splice(ctxIdx,1);renderFiles();updateDash();ctxIdx=null;}
+
+// ─── MEDIA PLAYER ───
+const VID=document.getElementById('videoEl');
+const AUD=document.getElementById('audioEl');
+
+function setupMedia(){
+  [VID,AUD].forEach(el=>{
+    el.addEventListener('timeupdate',updateProgress);
+    el.addEventListener('loadedmetadata',updateProgress);
+    el.addEventListener('durationchange',updateProgress);
+    el.addEventListener('ended',onEnded);
+    el.addEventListener('play',()=>{
+      setPlayIcon(true);
+      if(isSyncing)return;
+      const t=playlist[currentTrack];if(!t)return;
+      let url=t.url;if(url.startsWith('blob:')&&serverBase)url=`${serverBase}/files/${encodeURIComponent(t.name)}`;
+      wsSend({type:'play',file:t.name,url,time:el.currentTime});
+      document.getElementById('syncNowPlaying').textContent=`▶ ${t.name}`;
+    });
+    el.addEventListener('pause',()=>{setPlayIcon(false);if(!isSyncing)wsSend({type:'pause',time:el.currentTime});});
+    el.addEventListener('seeked',()=>{if(!isSyncing)wsSend({type:'seek',time:el.currentTime});});
+  });
+  VID.addEventListener('click',togglePlay);
+  setVolume(80);
+}
+
+function getEl(){return activeMedia==='audio'?AUD:VID;}
+function loadMediaFiles(fl){Array.from(fl).forEach(f=>addToPlaylist(f));if(currentTrack===-1)playTrack(0);}
+
+function addToPlaylist(f){
+  playlist.push({name:f.name,url:f._url||URL.createObjectURL(f),type:f.type||guessType(f.name)});
+  renderPlaylist();updateDash();
+}
+
+function renderPlaylist(){
+  document.getElementById('plCount').textContent=playlist.length+' items';
+  document.getElementById('playlistEl').innerHTML=playlist.map((t,i)=>`<div class="playlist-item${i===currentTrack?' playing':''}" onclick="playTrack(${i})"><div class="pl-icon">${t.type.startsWith('video/')?'🎬':'🎵'}</div><div class="pl-name">${t.name}</div><button class="pl-del" onclick="event.stopPropagation();removePl(${i})">✕</button></div>`).join('')||'<div style="padding:16px;color:var(--text3);font-size:.78rem;text-align:center">No items — add files to start</div>';
+}
+
+function removePl(i){playlist.splice(i,1);if(currentTrack===i){VID.pause();AUD.pause();currentTrack=-1;}else if(currentTrack>i)currentTrack--;renderPlaylist();updateDash();}
+
+function clearPlaylist(){playlist=[];currentTrack=-1;VID.pause();VID.src='';AUD.pause();AUD.src='';activeMedia=null;VID.style.display='none';document.getElementById('videoPlaceholder').style.display='block';renderPlaylist();updateDash();}
+
+function playTrack(i){
+  if(i<0||i>=playlist.length)return;
+  currentTrack=i;
+  const t=playlist[i];
+  const isVid=t.type.startsWith('video/');
+  activeMedia=isVid?'video':'audio';
+  VID.pause();AUD.pause();
+  const el=isVid?VID:AUD;
+  el.src=t.url;
+  VID.style.display=isVid?'block':'none';
+  document.getElementById('videoPlaceholder').style.display=isVid?'none':'flex';
+  el.load();
+  el.play().catch(()=>{});
+  document.getElementById('mediaTitle').textContent=t.name;
+  setPlayIcon(true);renderPlaylist();
+  if(!isSyncing&&serverOnline){let url=t.url;if(url.startsWith('blob:'))url=`${serverBase}/files/${encodeURIComponent(t.name)}`;wsSend({type:'track_change',file:t.name,url});document.getElementById('syncNowPlaying').textContent=`▶ ${t.name}`;}
+}
+
+function togglePlay(){const el=getEl();if(!el.src||el.src===window.location.href)return;if(el.paused){el.play().catch(()=>{});setPlayIcon(true);}else{el.pause();setPlayIcon(false);}}
+function setPlayIcon(p){document.getElementById('playIcon').innerHTML=p?'<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>':'<path d="M8 5v14l11-7z"/>';document.getElementById('playIconBig').textContent=p?'⏸':'▶';}
+function skipTime(s){const el=getEl();el.currentTime=Math.max(0,Math.min(el.duration||0,el.currentTime+s));}
+function seekMedia(v){const el=getEl();if(el.duration)el.currentTime=(v/1000)*el.duration;}
+function updateProgress(){const el=getEl();if(!el.duration||isNaN(el.duration))return;const c=el.currentTime||0,d=el.duration;document.getElementById('progressBar').value=(c/d)*1000;document.getElementById('timeLabel').textContent=`${fmt(c)} / ${fmt(d)}`;}
+function fmt(s){if(!s||isNaN(s))return'0:00';return`${Math.floor(s/60)}:${p2(Math.floor(s%60))}`;}
+function setVolume(v){VID.volume=v/100;AUD.volume=v/100;}
+function toggleMute(){const el=getEl();el.muted=!el.muted;document.getElementById('muteBtn').classList.toggle('active',el.muted);}
+function toggleFullscreen(){const s=document.getElementById('videoStage');if(!document.fullscreenElement)s.requestFullscreen();else document.exitFullscreen();}
+function prevTrack(){if(!playlist.length)return;playTrack(currentTrack>0?currentTrack-1:playlist.length-1);}
+function nextTrack(){if(!playlist.length)return;playTrack(isShuffle?Math.floor(Math.random()*playlist.length):(currentTrack+1)%playlist.length);}
+function toggleShuffle(){isShuffle=!isShuffle;document.getElementById('shuffleBtn').classList.toggle('active',isShuffle);notify(isShuffle?'Shuffle on':'Shuffle off','info');}
+function toggleRepeat(){repeatMode=(repeatMode+1)%3;document.getElementById('repeatBtn').classList.toggle('active',repeatMode>0);notify(['Repeat off','Repeat all','Repeat one'][repeatMode],'info');}
+function onEnded(){if(repeatMode===2){getEl().play();return;}if(repeatMode===1||currentTrack<playlist.length-1)nextTrack();}
+
+// ─── YOUTUBE ───
+function ytPreview(){const id=(document.getElementById('ytUrl').value.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/)||[])[1];if(!id)return;document.getElementById('ytThumb').src=`https://img.youtube.com/vi/${id}/hqdefault.jpg`;document.getElementById('ytPreview').style.display='block';}
+function ytFetch(){ytPreview();}
+function ytDownload(type){const url=document.getElementById('ytUrl').value;if(!url)return;if(!serverOnline){notify('Start server first','warn');return;}notify('Sending...','info');fetch(serverBase+'/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,type})}).then(r=>r.json()).then(d=>{if(d.ok){notify('Download complete ✓','success');fetchServerFiles();}else notify('Error: '+d.error,'err');}).catch(()=>notify('Failed — check yt-dlp installed','err'));}
+function ytWatchNow(){const id=(document.getElementById('ytUrl').value.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/)||[])[1];if(!id){notify('Invalid URL','err');return;}const w=window.open('','_blank','width=854,height=480');w.document.write(`<!DOCTYPE html><html><head><title>NethOS Watch</title><style>*{margin:0;background:#000}</style></head><body><iframe width="100%" height="100%" src="https://www.youtube.com/embed/${id}?autoplay=1" frameborder="0" allow="autoplay;fullscreen" allowfullscreen style="position:fixed;inset:0;width:100vw;height:100vh;"></iframe></body></html>`);}
+
+// ─── CHAT ───
+function toggleChat(){chatOpen=!chatOpen;document.getElementById('chatDrawer').classList.toggle('open',chatOpen);if(chatOpen)document.getElementById('chatInput').focus();}
+function sendChat(){const inp=document.getElementById('chatInput');const t=inp.value.trim();if(!t)return;inp.value='';wsSend({type:'chat',text:t});addChat('You',t,true);}
+function addChat(from,text,mine){const box=document.getElementById('chatMessages');const el=document.createElement('div');el.className=`chat-msg${mine?' mine':''}`;el.innerHTML=`<span class="cm-from">${from}</span>${esc(text)}`;box.appendChild(el);box.scrollTop=box.scrollHeight;}
+function sysChat(t){const box=document.getElementById('chatMessages');const el=document.createElement('div');el.className='chat-msg system';el.textContent=t;box.appendChild(el);box.scrollTop=box.scrollHeight;}
+
+// ─── UI HELPERS ───
+function showPanel(name,el){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.sb-icon').forEach(i=>i.classList.remove('active'));document.getElementById('panel-'+name).classList.add('active');if(el)el.classList.add('active');}
+function updateDash(){document.getElementById('fileCount').textContent=files.length;document.getElementById('playlistCount').textContent=playlist.length;}
+function notify(msg,type='info'){const a=document.getElementById('notif-area');const n=document.createElement('div');n.className=`notif ${type}`;n.textContent=msg;a.appendChild(n);setTimeout(()=>n.remove(),3500);}
+function toast(msg){const t=document.getElementById('syncToast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function openShutdown(){document.getElementById('modalBg').classList.add('open');}
+function shutdown(){VID.pause();VID.src='';AUD.pause();AUD.src='';document.getElementById('desktop').style.opacity='0';setTimeout(()=>{document.body.innerHTML='<div style="position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace"><div style="color:#00d4ff;font-size:2rem;font-weight:bold">NethOS</div><div style="color:#475569;margin-top:8px">Shut down. Refresh to restart.</div></div>';},500);}
+
+// ─── TERMINAL ───
+function toggleTerminal(){const tw=document.getElementById('term-window');termOpen=!termOpen;tw.classList.toggle('open',termOpen);if(termOpen&&!tw.dataset.booted){tw.dataset.booted='1';termBoot();}if(termOpen)setTimeout(()=>document.getElementById('termInput').focus(),200);}
+function closeTerminal(){termOpen=false;document.getElementById('term-window').classList.remove('open');}
+function minimizeTerminal(){const tw=document.getElementById('term-window');if(!termMin){tw.style.height='36px';tw.style.overflow='hidden';}else{tw.style.height='';tw.style.overflow='';}termMin=!termMin;}
+function maximizeTerminal(){const tw=document.getElementById('term-window');if(!termMax){Object.assign(tw.dataset,{pl:tw.style.left,pt:tw.style.top,pw:tw.style.width,ph:tw.style.height});tw.style.cssText+='left:0;top:42px;width:100vw;height:calc(100vh - 42px);border-radius:0;';termMax=true;}else{tw.style.left=tw.dataset.pl||'80px';tw.style.top=tw.dataset.pt||'60px';tw.style.width=tw.dataset.pw||'';tw.style.height=tw.dataset.ph||'';tw.style.borderRadius='';termMax=false;}}
+function termDragStart(e){if(e.target.classList.contains('term-dot')||termMax)return;tDrag=true;const r=document.getElementById('term-window').getBoundingClientRect();tDOX=e.clientX-r.left;tDOY=e.clientY-r.top;e.preventDefault();}
+function termTouchStart(e){if(e.target.classList.contains('term-dot')||termMax)return;const t=e.touches[0];const r=document.getElementById('term-window').getBoundingClientRect();tDOX=t.clientX-r.left;tDOY=t.clientY-r.top;tDrag=true;}
+document.addEventListener('mousemove',e=>{if(tDrag){const tw=document.getElementById('term-window');tw.style.left=Math.max(0,Math.min(window.innerWidth-100,e.clientX-tDOX))+'px';tw.style.top=Math.max(42,Math.min(window.innerHeight-50,e.clientY-tDOY))+'px';}if(tRes){const tw=document.getElementById('term-window');tw.style.width=Math.max(320,tROW+(e.clientX-tROX))+'px';tw.style.height=Math.max(200,tROH+(e.clientY-tROY))+'px';}});
+document.addEventListener('mouseup',()=>{tDrag=false;tRes=false;});
+document.addEventListener('touchmove',e=>{if(!tDrag)return;const t=e.touches[0];const tw=document.getElementById('term-window');tw.style.left=Math.max(0,t.clientX-tDOX)+'px';tw.style.top=Math.max(42,t.clientY-tDOY)+'px';},{passive:true});
+document.addEventListener('touchend',()=>{tDrag=false;});
+function termResizeStart(e){tRes=true;const r=document.getElementById('term-window').getBoundingClientRect();tROW=r.width;tROH=r.height;tROX=e.clientX;tROY=e.clientY;e.preventDefault();e.stopPropagation();}
+const tOut=()=>document.getElementById('term-output');
+function tL(text,cls='tl-out'){const s=document.createElement('span');s.className='tl '+cls;s.innerHTML=text===''?'&nbsp;':esc(text);tOut().appendChild(s);tOut().scrollTop=tOut().scrollHeight;}
+function tPrompt(){const s=document.createElement('span');s.className='tl tl-dim';s.innerHTML=`<span style="color:#00ffcc">❯</span> <span style="color:#ffe500">nethos@local:${termDir}</span>$ `;tOut().appendChild(s);}
+function tEcho(c){const s=document.createElement('span');s.className='tl tl-cmd';s.innerHTML=`<span style="color:#00ffcc">❯</span> <span style="color:#ffe500">nethos@local:${termDir}</span>$ <span style="color:#39ff14">${esc(c)}</span>`;tOut().appendChild(s);tOut().scrollTop=tOut().scrollHeight;}
+function tSleep(ms){return new Promise(r=>setTimeout(r,ms));}
+async function termBoot(){const ls=[['tl-banner',' ╔══════════════════════════════════╗'],['tl-banner',' ║   N E T H O S  T E R M I N A L  ║'],['tl-banner',' ╚══════════════════════════════════╝'],['tl-info',' NethOS v2.0'],['tl-out',''],['tl-success',' ✓ Terminal ready'],['tl-warn',' ⚠ Browser sandbox — real installs need OS terminal'],['tl-out',''],['tl-info'," Type  help  for all commands"],['tl-out','']];for(const[c,t]of ls){tL(t,c);await tSleep(25);}tPrompt();}
+function termNewTab(){const id=termTabN++;termTabs.push({id});const bar=document.getElementById('term-tabbar');const add=bar.querySelector('.tterm-add');const tab=document.createElement('div');tab.className='tterm-tab';tab.id=`ttab-${id}`;tab.innerHTML=`<span>⚡ tab-${id}</span><span class="tterm-tab-x" onclick="event.stopPropagation();termCloseTab(${id})">×</span>`;tab.onclick=()=>termSwitchTab(id);bar.insertBefore(tab,add);termSwitchTab(id);document.getElementById('term-output').innerHTML='';tL('New session.','tl-dim');tPrompt();}
+function termSwitchTab(id){document.querySelectorAll('.tterm-tab').forEach(t=>t.classList.toggle('active',t.id===`ttab-${id}`));}
+function termCloseTab(id){if(termTabs.length<=1)return;termTabs=termTabs.filter(t=>t.id!==id);document.getElementById(`ttab-${id}`)?.remove();termSwitchTab(termTabs[termTabs.length-1].id);}
+function termHandleKey(e){
+  const inp=e.target;
+  if(e.key==='Enter'){const cmd=inp.value.trim();inp.value='';if(cmd){termHistory.unshift(cmd);termHistIdx=-1;}tEcho(cmd);termRun(cmd);}
+  else if(e.key==='ArrowUp'){e.preventDefault();if(termHistIdx<termHistory.length-1)termHistIdx++;inp.value=termHistory[termHistIdx]||'';}
+  else if(e.key==='ArrowDown'){e.preventDefault();termHistIdx=termHistIdx>0?termHistIdx-1:-1;inp.value=termHistIdx>=0?termHistory[termHistIdx]:'';}
+  else if(e.key==='Tab'){e.preventDefault();const cmds=['help','clear','ls','cd','pwd','cat','sysinfo','neofetch','netstat','ping','echo','date','whoami','history','nethos','ytdl','exit'];const m=cmds.filter(c=>c.startsWith(inp.value));if(m.length===1)inp.value=m[0]+' ';else if(m.length>1){tL(m.join('  '),'tl-dim');tPrompt();}}
+  else if(e.key==='c'&&e.ctrlKey){tL('^C','tl-err');inp.value='';termBusy=false;tPrompt();}
+  else if(e.key==='l'&&e.ctrlKey){e.preventDefault();document.getElementById('term-output').innerHTML='';tPrompt();}
+}
+async function termRun(raw){
+  if(!raw){tPrompt();return;}
+  const parts=raw.match(/(?:[^\s"]+|"[^"]*")+/g)||[];
+  const cmd=parts[0]?.toLowerCase()||'';
+  const args=parts.slice(1).map(a=>a.replace(/^"|"$/g,''));
+  switch(cmd){
+    case 'help':tL('','');tL('  NETHOS:','tl-info');[['nethos status','install status'],['nethos install all','full setup guide'],['nethos install node','Node.js instructions'],['nethos install express','npm install express cors multer ws'],['nethos install ytdlp','pip install yt-dlp'],['nethos server start','start LAN server'],['nethos export','download server script'],['ytdl --url <url>','download youtube video'],['ytdl --audio <url>','audio only']].forEach(([c,d])=>tL(`    ${c.padEnd(30)}${d}`,'tl-out'));tL('');tL('  SYSTEM:','tl-info');[['sysinfo','system info'],['neofetch','OS display'],['netstat','network'],['ping <host>','ping'],['ls / cd / pwd / cat','files'],['clear','clear'],['exit','close']].forEach(([c,d])=>tL(`    ${c.padEnd(30)}${d}`,'tl-out'));break;
+    case 'clear':case 'cls':document.getElementById('term-output').innerHTML='';tPrompt();return;
+    case 'ls':{const f=termVFS[termDir]||[];tL('');f.forEach(x=>tL(`  📄 ${x}`,'tl-out'));tL('');}break;
+    case 'cd':if(!args[0]||args[0]==='~'){termDir='~';}else{const t=args[0].startsWith('~')?args[0]:termDir+'/'+args[0];termVFS[t]?termDir=t:tL(`cd: ${args[0]}: Not found`,'tl-err');}document.getElementById('termPromptEl').textContent=`❯ nethos@local:${termDir}$ `;break;
+    case 'pwd':tL(termDir,'tl-out');break;
+    case 'cat':tL(!args[0]?'Usage: cat <file>':args[0]==='README.md'?'NethOS v2.0 — run nethos install all to set up':args[0]==='nethos-server.js'?'// Use: nethos export to download this file':`cat: ${args[0]}: Not found`,!args[0]?'tl-warn':'tl-out');break;
+    case 'echo':tL(args.join(' '),'tl-out');break;
+    case 'date':tL(new Date().toString(),'tl-out');break;
+    case 'whoami':tL('nethos-user','tl-out');break;
+    case 'uname':tL('NethOS 2.0.0 (Browser) x86_64','tl-out');break;
+    case 'history':termHistory.slice().reverse().forEach((h,i)=>tL(`  ${String(i+1).padStart(3,'0')}  ${h}`,'tl-dim'));break;
+    case 'sysinfo':tL('');tL('  ┌──────── SYSINFO ────────┐','tl-info');[['OS',navigator.platform||'Unknown'],['CPU',`${navigator.hardwareConcurrency||'?'} cores`],['RAM',`${navigator.deviceMemory||'?'}GB`],['Screen',`${screen.width}x${screen.height}`],['Online',navigator.onLine?'Yes':'No']].forEach(([k,v])=>tL(`  │ ${k.padEnd(8)}${v}`,'tl-out'));tL('  └─────────────────────────┘','tl-info');tL('');break;
+    case 'neofetch':tL('');tL('  ██╗  ██╗   nethos@local','tl-banner');tL(`  ███████║   OS: NethOS 2.0`,'tl-banner');tL(`  ██╔══██║   CPU: ${navigator.hardwareConcurrency||'?'} cores`,'tl-banner');tL(`  ╚═╝  ╚═╝   RAM: ${navigator.deviceMemory||'?'}GB`,'tl-banner');tL('');break;
+    case 'netstat':tL('');tL(`  IP:     ${document.getElementById('localIP').textContent}`,'tl-info');tL(`  Server: ${serverOnline?serverBase:'offline'}`,'tl-info');tL(`  WS:     ${ws&&ws.readyState===WebSocket.OPEN?'connected':'disconnected'}`,'tl-info');tL('');break;
+    case 'ping':if(!args[0]){tL('Usage: ping <host>','tl-warn');break;}termBusy=true;tL(`PING ${args[0]}:`,'tl-info');for(let i=0;i<4;i++){await tSleep(350);tL(`64 bytes icmp_seq=${i} time=${Math.floor(Math.random()*25+4)}ms`,'tl-out');}tL('4 tx, 4 rx, 0% loss','tl-success');termBusy=false;break;
+    case 'nethos':await tNethos(args);break;
+    case 'ytdl':await tYtdl(args);break;
+    case 'npm':case 'pip':case 'node':tL(`${cmd}: run in OS terminal, not browser`,'tl-warn');break;
+    case 'exit':case 'close':closeTerminal();return;
+    case '':break;
+    default:tL(`bash: ${cmd}: command not found`,'tl-err');tL("Type 'help'",'tl-dim');
+  }
+  tPrompt();
+}
+async function tNethos(args){
+  const sub=args[0]?.toLowerCase(),sub2=args[1]?.toLowerCase();
+  if(!sub){tL('Usage: nethos [status|install|server|export|ip]','tl-warn');return;}
+  if(sub==='status'){tL('');tL('  ── Status ──','tl-info');[['Node.js',termInst.node,'nodejs.org/download'],['Express+ws',termInst.express,'npm install express cors multer ws'],['yt-dlp',termInst.ytdlp,'pip install yt-dlp'],['Server',termInst.server,'nethos server start']].forEach(([n,ok,h])=>tL(`  ${ok?'✓':'✗'}  ${n.padEnd(16)} ${ok?'OK':'→ '+h}`,ok?'tl-success':'tl-err'));tL('');return;}
+  if(sub==='install'){
+    const pkg=sub2||'all';
+    if(pkg==='all'){await tInst('node');await tSleep(200);await tInst('express');await tSleep(200);await tInst('ytdlp');return;}
+    await tInst(pkg);return;
+  }
+  if(sub==='server'){
+    if(sub2==='start'){tL('');tL('  Run in your OS terminal:','tl-out');tL('  node nethos-server.js','tl-warn');await tFP('Launching');tL(`  🚀 http://${document.getElementById('localIP').textContent}:3000`,'tl-success');tL('');termInst.server=true;return;}
+    if(sub2==='stop'){tL('Server stopped.','tl-warn');termInst.server=false;return;}
+  }
+  if(sub==='export'){exportServer();tL('Downloading nethos-server.js...','tl-success');return;}
+  if(sub==='ip'){tL(`IP: ${document.getElementById('localIP').textContent}`,'tl-info');return;}
+  tL(`nethos: unknown '${sub}'`,'tl-err');
+}
+async function tInst(pkg){
+  if(pkg==='node'){tL('');tL('  Install Node.js:','tl-info');tL('  macOS:   brew install node','tl-warn');tL('  Windows: winget install OpenJS.NodeJS','tl-warn');tL('  Linux:   sudo apt install nodejs npm','tl-warn');tL('  Or:      nodejs.org/en/download','tl-warn');tL('');}
+  else if(pkg==='express'){tL('');tL('  npm install express cors multer ws','tl-warn');await tFP('Simulating');['express@4.18.2','cors@2.8.5','multer@1.4.5','ws@8.16.0'].forEach(p=>tL(`  + ${p}`,'tl-success'));termInst.express=true;tL('');}
+  else if(pkg==='ytdlp'){tL('');tL('  pip install yt-dlp','tl-warn');tL('  OR: brew install yt-dlp','tl-warn');await tFP('Simulating');termInst.ytdlp=true;tL('  ✓ Verify: yt-dlp --version','tl-success');tL('');}
+}
+async function tFP(label){
+  const s=document.createElement('span');s.className='tl tl-info';
+  s.innerHTML=`  ${esc(label)} <span class="tprog-track"><span class="tprog-bar" id="tpb" style="width:0%"></span></span> <span id="tpc">0%</span>`;
+  tOut().appendChild(s);tOut().scrollTop=tOut().scrollHeight;
+  for(let i=0;i<=100;i+=4){await tSleep(30);const b=document.getElementById('tpb'),p=document.getElementById('tpc');if(b)b.style.width=i+'%';if(p)p.textContent=i+'%';}
+  const b=document.getElementById('tpb');if(b)b.id='';
+}
+async function tYtdl(args){
+  const ui=args.indexOf('--url'),ai=args.indexOf('--audio');
+  const url=ui>=0?args[ui+1]:(ai>=0?args[ai+1]:null);
+  if(!url){tL('Usage: ytdl --url <url>','tl-warn');return;}
+  if(!serverOnline){tL('Start server first: nethos server start','tl-warn');return;}
+  tL('  Sending to server...','tl-info');
+  try{const r=await fetch(serverBase+'/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,type:ai>=0?'audio':'video'})});const d=await r.json();if(d.ok){tL('  ✓ Done','tl-success');await fetchServerFiles();}else tL(`  Error: ${d.error}`,'tl-err');}
+  catch(e){tL('  Cannot reach server','tl-err');}
+}
+document.getElementById('term-output')?.addEventListener('click',()=>document.getElementById('termInput')?.focus());
+
+// ─── EXPORT SERVER ───
+function exportServer(){
+  const code=`// NethOS Server v2.0\n// npm install express cors multer ws\n// pip install yt-dlp  (optional)\n// node nethos-server.js\n\nconst express=require('express'),cors=require('cors'),multer=require('multer'),path=require('path'),fs=require('fs'),os=require('os'),http=require('http'),{exec}=require('child_process'),WebSocket=require('ws');\nconst app=express(),server=http.createServer(app),wss=new WebSocket.Server({server}),PORT=process.env.PORT||3000;\nconst SHARE=path.join(__dirname,'nethos-files'),DL=path.join(__dirname,'nethos-downloads');\n[SHARE,DL].forEach(d=>{if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});});\nconst storage=multer.diskStorage({destination:(req,file,cb)=>cb(null,SHARE),filename:(req,file,cb)=>cb(null,file.originalname)});\nconst upload=multer({storage});\napp.use(cors());app.use(express.json());app.use(express.static(__dirname));app.use('/downloads',express.static(DL));\n\napp.get('/files/:name',(req,res)=>{\n  const fp=path.join(SHARE,decodeURIComponent(req.params.name));\n  if(!fs.existsSync(fp))return res.status(404).send('Not found');\n  const stat=fs.statSync(fp),total=stat.size,range=req.headers.range;\n  const mime={'.mp4':'video/mp4','.mkv':'video/x-matroska','.webm':'video/webm','.mp3':'audio/mpeg','.wav':'audio/wav','.ogg':'audio/ogg','.flac':'audio/flac','.aac':'audio/aac','.m4a':'audio/mp4'}[path.extname(fp).toLowerCase()]||'application/octet-stream';\n  if(range){const[s,e]=range.replace(/bytes=/,'').split('-');const start=parseInt(s),end=e?parseInt(e):total-1;res.writeHead(206,{'Content-Range':\`bytes \${start}-\${end}/\${total}\`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Content-Type':mime});fs.createReadStream(fp,{start,end}).pipe(res);}\n  else{res.writeHead(200,{'Content-Length':total,'Content-Type':mime,'Accept-Ranges':'bytes'});fs.createReadStream(fp).pipe(res);}\n});\n\nlet clients=new Map(),cc=0,pb={file:null,url:null,playing:false,time:0,updatedAt:Date.now()};\nfunction bc(data,ex){const m=JSON.stringify(data);wss.clients.forEach(w=>{if(w!==ex&&w.readyState===WebSocket.OPEN)w.send(m);});}\nfunction getIP(){for(const ns of Object.values(os.networkInterfaces()))for(const n of ns)if(n.family==='IPv4'&&!n.internal)return n.address;return'localhost';}\nfunction fl(){const ip=getIP();return fs.readdirSync(SHARE).map(name=>({name,size:fs.statSync(path.join(SHARE,name)).size,url:\`http://\${ip}:\${PORT}/files/\${encodeURIComponent(name)}\`}));}\n\nwss.on('connection',(ws,req)=>{\n  const id=++cc,name=\`Device-\${id}\`;\n  clients.set(ws,{id,name});\n  console.log(\`[+] \${name} connected [\${wss.clients.size} online]\`);\n  ws.send(JSON.stringify({type:'welcome',id,name,peers:[...clients.values()].filter(c=>c.id!==id).map(c=>({id:c.id,name:c.name})),playback:pb,files:fl()}));\n  bc({type:'peer_joined',peer:{id,name}},ws);\n  ws.on('message',raw=>{\n    let msg;try{msg=JSON.parse(raw);}catch(e){return;}\n    const cl=clients.get(ws);\n    if(msg.type==='play')pb={file:msg.file,url:msg.url,playing:true,time:msg.time||0,updatedAt:Date.now()};\n    else if(msg.type==='pause'){pb.playing=false;pb.time=msg.time||0;pb.updatedAt=Date.now();}\n    else if(msg.type==='seek'){pb.time=msg.time||0;pb.updatedAt=Date.now();}\n    else if(msg.type==='track_change')pb={file:msg.file,url:msg.url,playing:true,time:0,updatedAt:Date.now()};\n    bc({...msg,by:cl.name},ws);\n  });\n  ws.on('close',()=>{const cl=clients.get(ws);bc({type:'peer_left',id:cl?.id,name:cl?.name});clients.delete(ws);console.log(\`[-] \${cl?.name} left\`);});\n  ws.on('error',()=>clients.delete(ws));\n});\n\napp.get('/api/info',(req,res)=>res.json({ip:getIP(),port:PORT,version:'2.0'}));\napp.get('/api/files',(req,res)=>res.json(fl()));\napp.post('/api/upload',upload.array('files'),(req,res)=>{const saved=req.files.map(f=>({name:f.originalname,size:f.size,url:\`http://\${getIP()}:\${PORT}/files/\${encodeURIComponent(f.originalname)}\`}));saved.forEach(f=>[...wss.clients].forEach(w=>{if(w.readyState===WebSocket.OPEN)w.send(JSON.stringify({type:'file_added',file:f}));}));res.json({ok:true,files:saved});});\napp.delete('/api/files/:name',(req,res)=>{const fp=path.join(SHARE,req.params.name);if(fs.existsSync(fp)){fs.unlinkSync(fp);[...wss.clients].forEach(w=>{if(w.readyState===WebSocket.OPEN)w.send(JSON.stringify({type:'file_deleted',name:req.params.name}));});res.json({ok:true});}else res.status(404).json({error:'Not found'});});\napp.get('/api/downloads',(req,res)=>{const ip=getIP();res.json(fs.readdirSync(DL).map(name=>({name,size:fs.statSync(path.join(DL,name)).size,url:\`http://\${ip}:\${PORT}/downloads/\${encodeURIComponent(name)}\`})));});\napp.post('/api/download',(req,res)=>{const{url,type}=req.body;if(!url)return res.status(400).json({error:'No URL'});const flags=type==='audio'?'-x --audio-format mp3':'-f \"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best\"';exec(\`yt-dlp \${flags} -o \"\${DL}/%(title)s.%(ext)s\" \"\${url}\"\`,{timeout:300000},(err,stdout,stderr)=>{if(err)return res.status(500).json({error:stderr||err.message});res.json({ok:true});});});\n\nconst ip=getIP();\nserver.listen(PORT,'0.0.0.0',()=>{\n  console.log(\`\\n╔══════════════════════════════════════╗\`);\n  console.log(\`║      NethOS Server v2.0              ║\`);\n  console.log(\`║  Local:   http://localhost:\${PORT}        ║\`);\n  console.log(\`║  Network: http://\${ip}:\${PORT}             ║\`);\n  console.log(\`║  npm install express cors multer ws  ║\`);\n  console.log(\`║  Ctrl+C to stop                      ║\`);\n  console.log(\`╚══════════════════════════════════════╝\\n\`);\n});\nprocess.on('SIGINT',()=>{[...wss.clients].forEach(w=>{if(w.readyState===WebSocket.OPEN)w.send(JSON.stringify({type:'server_shutdown'}));});setTimeout(()=>process.exit(0),300);});\n`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));a.download='nethos-server.js';a.click();
+  notify('nethos-server.js downloaded ✓','success');
+}
+</script>
+</body>
+</html>
