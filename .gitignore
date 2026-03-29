@@ -1,0 +1,4 @@
+# Ignore generated and large data directories
+nethos-downloads/
+nethos-files/
+node_modules/
